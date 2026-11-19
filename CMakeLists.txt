@@ -23,12 +23,12 @@ juce_add_plugin(Choir
     COPY_PLUGIN_AFTER_BUILD    FALSE)   # set TRUE to auto-install (needs admin on Windows)
 
 target_sources(Choir PRIVATE
-    Source/ChoirEngine.h
-    Source/PluginProcessor.h
-    Source/PluginProcessor.cpp
-    Source/PluginEditor.h
-    Source/PluginEditor.cpp)
-
+    ChoirEngine.h
+    PluginProcessor.h
+    PluginProcessor.cpp
+    PluginEditor.h
+    PluginEditor.cpp)
+    
 target_compile_definitions(Choir PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
