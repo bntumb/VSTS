@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
-#include "ChoirEngine.h"
+#include "HarmonizerEngine.h"
 
 class ChoirAudioProcessor : public juce::AudioProcessor
 {
@@ -20,7 +20,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "Choir"; }
-    bool acceptsMidi() const override  { return false; }
+    bool acceptsMidi() const override  { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 4.0; }
@@ -34,6 +34,10 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // For the editor's pitch display: MIDI note numbers, -1 when unvoiced.
+    float getInputMidi() const { return engine.debugInputMidi(); }
+    float getLeadMidi()  const { return engine.debugLeadMidi(); }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -41,18 +45,9 @@ private:
 
     static constexpr int chunkSize = 512;
 
-    ChoirEngine engine;
+    HarmonizerEngine engine;
     juce::dsp::Reverb reverb;
-
-    std::atomic<float>* pVoices     = nullptr;
-    std::atomic<float>* pDetune     = nullptr;
-    std::atomic<float>* pTiming     = nullptr;
-    std::atomic<float>* pVibDepth   = nullptr;
-    std::atomic<float>* pVibRate    = nullptr;
-    std::atomic<float>* pWidth      = nullptr;
-    std::atomic<float>* pReverbSize = nullptr;
-    std::atomic<float>* pReverbMix  = nullptr;
-    std::atomic<float>* pMix        = nullptr;
+    std::array<bool, 128> heldNotes {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChoirAudioProcessor)
 };

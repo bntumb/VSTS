@@ -2,7 +2,8 @@
 
 #include "PluginProcessor.h"
 
-class ChoirAudioProcessorEditor : public juce::AudioProcessorEditor
+class ChoirAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                  private juce::Timer
 {
 public:
     explicit ChoirAudioProcessorEditor (ChoirAudioProcessor&);
@@ -20,9 +21,16 @@ private:
     };
 
     void addKnob (const juce::String& paramId, const juce::String& text);
+    void timerCallback() override;
 
     ChoirAudioProcessor& processor;
     std::vector<std::unique_ptr<Knob>> knobs;
+
+    juce::ComboBox keyBox, scaleBox;
+    juce::ToggleButton midiButton { "MIDI chord mode" };
+    juce::Label pitchLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>   midiAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChoirAudioProcessorEditor)
 };

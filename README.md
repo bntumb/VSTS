@@ -1,23 +1,27 @@
-# Choir – JUCE vocal-to-choir plugin
+# Choir – vocal harmonizer (Bon Iver style)
 
-Turns one voice into an ensemble of up to 32 virtual singers (random detune, entry timing,
-vibrato, drift, pan, level, tone) plus a hall reverb.
+Tracks your voice pitch, hard-tunes it to a key, and stacks 4 formant-preserving harmony voices
+on top, then adds a hall reverb.
 
-## Build (Windows)
-1. Install Visual Studio 2022 (Desktop development with C++) and CMake.
-2. In this folder:
-   cmake -B build -G "Visual Studio 17 2022"
-   cmake --build build --config Release
-3. Find `Choir.vst3` under `build/Choir_artefacts/Release/VST3/` and copy it to
-   `C:\Program Files\Common Files\VST3\` (or set COPY_PLUGIN_AFTER_BUILD TRUE and run as admin).
-4. Rescan plugins in your DAW. Put it on a vocal track.
+## Using it
+- Put it on a **mono vocal** track as an effect. Sing (or play) a clear, steady vocal.
+- Set **Key** and **Scale** to match your song. The top bar shows `sing A3 -> A3` (what it hears -> note it snaps to).
+- **Tune** 1.0 = robotic hard-tune (the Bon Iver / "Woods" sound). Lower it for a natural feel.
+- **Glide** = how fast pitch snaps (low = robotic).
+- **V1-V4 Step** = how many scale steps each harmony sits from the lead (+2 = third, +4 = fifth, -7 = octave down).
+  **V1-V4 Level** sets how loud each is.
+- **MIDI chord mode**: hold notes on a MIDI keyboard and the harmonies sing exactly those notes.
+  (Needs MIDI routed to the plugin; easy in Reaper, harder in some DAWs. Use Key/Scale mode otherwise.)
+- Plugin latency is ~40 ms; the DAW should compensate automatically.
 
-The first configure downloads JUCE (needs internet). JUCE licence: free for open-source /
-under its revenue threshold; check juce.com/juce-licence before selling.
+## Build on GitHub (no installs)
+Repo root must contain CMakeLists.txt, the .h/.cpp files and the `.github/workflows` folder.
+Push -> Actions tab -> download the **Choir-VST3-Windows** artifact -> copy `Choir.vst3` to
+`C:\Program Files\Common Files\VST3\`.
 
-## No Visual Studio? Let GitHub build it
-1. Create a free GitHub account and a new repository.
-2. Upload everything in this folder (including the hidden `.github` folder) to it.
-3. Open the repo's **Actions** tab -> "Build Windows VST3" -> wait ~10 minutes.
-4. Open the finished run and download the **Choir-VST3-Windows** artifact (a zip).
-5. Unzip it and copy `Choir.vst3` to `C:\Program Files\Common Files\VST3\`, then rescan in your DAW.
+## Build locally (Windows)
+    cmake -B build -A x64
+    cmake --build build --config Release
+Output: build/Choir_artefacts/Release/VST3/Choir.vst3
+
+JUCE licence: free for open-source / under its revenue threshold; check juce.com/juce-licence.
