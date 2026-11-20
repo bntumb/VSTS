@@ -1,6 +1,8 @@
 #pragma once
 // YIN pitch detector (de Cheveigne & Kawahara, 2002), JUCE-free.
-// Input is decimated to ~24 kHz internally to keep the CPU cost low.
+// Input is decimated to ~24 kHz internally. The lowest detectable pitch can be changed
+// at run time with setMinFreq(): a higher minimum means a shorter analysis window,
+// which means faster, lower-latency tracking.
 
 #include <algorithm>
 #include <cmath>
@@ -9,20 +11,29 @@
 class PitchDetector
 {
 public:
+    // Allocates for the worst case (60 Hz). No allocation happens after this.
     void prepare (double sampleRate)
     {
-        decim  = std::max (1, (int) std::lround (sampleRate / 24000.0));
-        fs     = (float) (sampleRate / decim);
-        tauMin = std::max (2, (int) (fs / 1000.0f));       // up to 1 kHz
-        tauMax = (int) (fs / 65.0f) + 2;                   // down to ~65 Hz
-        W      = 512;
-        frameLen = W + tauMax;
+        decim = std::max (1, (int) std::lround (sampleRate / 24000.0));
+        fs    = (float) (sampleRate / decim);
+        maxTauMax = (int) (fs / 60.0f) + 2;
+        maxW = 512;
 
-        ring.assign ((size_t) frameLen, 0.0f);
-        frame.assign ((size_t) frameLen, 0.0f);
-        d.assign ((size_t) tauMax + 1, 0.0f);
-        cm.assign ((size_t) tauMax + 1, 1.0f);
-        wp = 0; acc = 0.0f; cnt = 0;
+        ring.assign ((size_t) (maxW + maxTauMax), 0.0f);
+        frame.assign ((size_t) (maxW + maxTauMax), 0.0f);
+        d.assign ((size_t) maxTauMax + 1, 0.0f);
+        cm.assign ((size_t) maxTauMax + 1, 1.0f);
+        setMinFreq (65.0f);
+    }
+
+    void setMinFreq (float minHz)
+    {
+        tauMin = std::max (2, (int) (fs / 1000.0f));                    // up to 1 kHz
+        tauMax = std::min (maxTauMax, (int) (fs / minHz) + 2);
+        W      = std::clamp ((int) (1.4f * (float) tauMax), 192, maxW);
+        frameLen = W + tauMax;
+        std::fill (ring.begin(), ring.end(), 0.0f);
+        wp = 0; cnt = 0; acc = 0.0f;
     }
 
     void push (float x)
@@ -42,7 +53,11 @@ public:
     {
         clarity = 0.0f;
         for (int i = 0; i < frameLen; ++i)
-            frame[(size_t) i] = ring[(size_t) ((wp + i) % frameLen)];
+        {
+            int idx = wp + i;
+            if (idx >= frameLen) idx -= frameLen;
+            frame[(size_t) i] = ring[(size_t) idx];
+        }
 
         const float* x = frame.data() + tauMax;     // most recent W samples
 
@@ -105,7 +120,7 @@ public:
     }
 
 private:
-    int decim = 2, tauMin = 24, tauMax = 372, W = 512, frameLen = 884;
+    int decim = 2, tauMin = 24, tauMax = 372, W = 512, frameLen = 884, maxTauMax = 402, maxW = 512;
     float fs = 24000.0f;
     std::vector<float> ring, frame, d, cm;
     int wp = 0, cnt = 0;

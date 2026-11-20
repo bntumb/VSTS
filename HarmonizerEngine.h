@@ -30,8 +30,9 @@ public:
         int   key = 0;                // 0 = C ... 11 = B
         int   scale = 0;              // 0 Major, 1 Minor, 2 Dorian, 3 Mixolydian
         bool  midiMode = false;       // harmonies follow held MIDI notes
+        int   range = 1;              // 0 low voice (65 Hz+), 1 mid (100 Hz+), 2 high (150 Hz+)
         float tune = 1.0f;            // 0 = natural, 1 = hard-tuned
-        float glideMs = 12.0f;        // how fast pitch snaps to the target
+        float glideMs = 8.0f;         // how fast pitch snaps to the target
         float leadLevel = 1.0f;
         int   interval[numHarm] = { 2, 4, -3, -7 };            // scale steps from lead
         float level[numHarm]    = { 0.6f, 0.6f, 0.6f, 0.6f };
@@ -42,10 +43,11 @@ public:
     void prepare (double sampleRate, unsigned seed = 7)
     {
         sr      = (float) sampleRate;
-        latency = (int) std::lround (0.040 * sampleRate);
-        t0Max   = 0.016f * sr;                 // lowest f0 ~62 Hz
         t0Min   = sr / 1000.0f;
-        t0Cur   = 0.006f * sr;
+        detector.prepare (sampleRate);
+        curRange = -1;
+        applyRange (1);
+        t0Cur   = 0.004f * sr;
 
         ringSize = 1; while ((double) ringSize < 0.4 * sampleRate) ringSize <<= 1;
         ring.assign ((size_t) ringSize, 0.0f);
@@ -54,10 +56,10 @@ public:
         accSize = 1; while ((double) accSize < 0.1 * sampleRate) accSize <<= 1;
         accMask = accSize - 1;
 
-        hop = std::max (64, (int) (0.008 * sampleRate));
+        hop = std::max (32, (int) (0.003 * sampleRate));          // 3 ms control rate
+        holdHops = std::max (3, (int) std::lround (0.035 * sampleRate / hop));
         hopCount = 0;
         now = 0;
-        detector.prepare (sampleRate);
 
         std::mt19937 rng (seed);
         std::uniform_real_distribution<float> uni (-1.0f, 1.0f);
@@ -77,6 +79,9 @@ public:
     // in: mono. outL/outR: harmonized stereo (overwritten). held: 128 bools of held MIDI notes.
     void process (const float* in, float* outL, float* outR, int n, const Params& p, const bool* held)
     {
+        if (p.range != curRange)
+            applyRange (p.range);
+
         const float glideCoef = 1.0f - std::exp (-1.0f / (std::max (1.0f, p.glideMs) * 0.001f * sr));
         const float gainCoef  = 1.0f - std::exp (-1.0f / (0.008f * sr));
 
@@ -186,13 +191,38 @@ private:
         return key + 12 * o + scales[scale][d - 7 * o];
     }
 
+    // Voice range sets the lowest pitch we track, which sets the grain size and latency:
+    //   latency = 2.6 x the longest pitch period (needed so a grain never reads the future).
+    void applyRange (int r)
+    {
+        static const float minHz[3] = { 65.0f, 100.0f, 150.0f };
+        curRange = std::clamp (r, 0, 2);
+        t0Max    = sr / minHz[curRange];
+        latency  = (int) std::ceil (2.6f * t0Max);
+        t0Cur    = std::min (t0Cur, t0Max);
+        detector.setMinFreq (minHz[curRange]);
+        voicedHold = 0; histCount = 0;
+        for (auto& v : voices)
+        {
+            std::fill (v.acc.begin(), v.acc.end(), 0.0f);
+            v.csValid = false;
+            v.nextCenter = (double) now;
+        }
+    }
+
+    // 4-point cubic (Catmull-Rom) interpolation: keeps high frequencies intact.
     float readRing (double p) const
     {
         const int64_t ip = (int64_t) std::floor (p);
         const float   f  = (float) (p - (double) ip);
-        const float   a  = ring[(size_t) (ip & ringMask)];
-        const float   b  = ring[(size_t) ((ip + 1) & ringMask)];
-        return a + f * (b - a);
+        const float   y0 = ring[(size_t) ((ip - 1) & ringMask)];
+        const float   y1 = ring[(size_t) (ip & ringMask)];
+        const float   y2 = ring[(size_t) ((ip + 1) & ringMask)];
+        const float   y3 = ring[(size_t) ((ip + 2) & ringMask)];
+        const float   c1 = 0.5f * (y2 - y0);
+        const float   c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+        const float   c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+        return ((c3 * f + c2) * f + c1) * f + y1;
     }
 
     // Add one Hann grain (2 periods long) centred at the voice's next output centre.
@@ -237,10 +267,10 @@ private:
 
             float a = hist[0], b = histCount > 1 ? hist[1] : a, c = histCount > 2 ? hist[2] : a;
             curM = std::max (std::min (a, b), std::min (std::max (a, b), c));   // median of 3
-            voicedHold = 5;
+            voicedHold = holdHops;
 
             const float tTgt = std::clamp (sr / f0, t0Min, t0Max);
-            t0Cur += 0.3f * (tTgt - t0Cur);
+            t0Cur += 0.2f * (tTgt - t0Cur);
         }
         else if (voicedHold > 0)
         {
@@ -326,7 +356,7 @@ private:
     PitchDetector detector;
     std::array<Voice, numVoices> voices;
     std::vector<float> ring;
-    int ringSize = 0, accSize = 0, hop = 384, hopCount = 0, latency = 1920;
+    int ringSize = 0, accSize = 0, hop = 144, hopCount = 0, latency = 1920, curRange = -1, holdHops = 12;
     int64_t ringMask = 0, accMask = 0, now = 0;
     float sr = 48000.0f, t0Max = 768.0f, t0Min = 48.0f, t0Cur = 288.0f;
 

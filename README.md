@@ -1,7 +1,7 @@
 # Choir – vocal harmonizer (Bon Iver style)
 
 Tracks your voice pitch, hard-tunes it to a key, and stacks 4 formant-preserving harmony voices
-on top, then adds a hall reverb.
+on top, then adds a bright plate reverb.
 
 ## Using it
 - Put it on a **mono vocal** track as an effect. Sing (or play) a clear, steady vocal.
@@ -12,7 +12,9 @@ on top, then adds a hall reverb.
   **V1-V4 Level** sets how loud each is.
 - **MIDI chord mode**: hold notes on a MIDI keyboard and the harmonies sing exactly those notes.
   (Needs MIDI routed to the plugin; easy in Reaper, harder in some DAWs. Use Key/Scale mode otherwise.)
-- Plugin latency is ~40 ms; the DAW should compensate automatically.
+- **Voice Range** sets latency and tracking speed: Low voice (65 Hz+) 40 ms, Mid (100 Hz+) 26 ms, High (150 Hz+) 17 ms.
+  Pick the highest range that still covers your lowest sung note. The DAW compensates the latency automatically.
+- **Air** adds a high-shelf lift (5.5 kHz) for a crisper top end. **Hall Size** 0..1 = reverb time ~0.8 s .. 5 s.
 
 ## Build on GitHub (no installs)
 Repo root must contain CMakeLists.txt, the .h/.cpp files and the `.github/workflows` folder.

@@ -26,10 +26,10 @@ private:
     ChoirAudioProcessor& processor;
     std::vector<std::unique_ptr<Knob>> knobs;
 
-    juce::ComboBox keyBox, scaleBox;
+    juce::ComboBox keyBox, scaleBox, rangeBox;
     juce::ToggleButton midiButton { "MIDI chord mode" };
     juce::Label pitchLabel;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt, rangeAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>   midiAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChoirAudioProcessorEditor)

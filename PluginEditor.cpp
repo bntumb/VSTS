@@ -12,11 +12,14 @@ ChoirAudioProcessorEditor::ChoirAudioProcessorEditor (ChoirAudioProcessor& p)
 {
     keyBox.addItemList ({ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 1);
     scaleBox.addItemList ({ "Major", "Minor", "Dorian", "Mixolydian" }, 1);
+    rangeBox.addItemList ({ "Low voice (40 ms)", "Mid voice (26 ms)", "High voice (17 ms)" }, 1);
+    addAndMakeVisible (rangeBox);
     addAndMakeVisible (keyBox);
     addAndMakeVisible (scaleBox);
     addAndMakeVisible (midiButton);
     keyAtt   = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.apvts, "key", keyBox);
     scaleAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.apvts, "scale", scaleBox);
+    rangeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.apvts, "range", rangeBox);
     midiAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>   (p.apvts, "midi", midiButton);
 
     pitchLabel.setJustificationType (juce::Justification::centredRight);
@@ -27,6 +30,7 @@ ChoirAudioProcessorEditor::ChoirAudioProcessorEditor (ChoirAudioProcessor& p)
     addKnob ("lead",   "Lead");
     addKnob ("spread", "Spread");
     addKnob ("width",  "Width");
+    addKnob ("air",    "Air");
     addKnob ("out",    "Output");
     addKnob ("iv1", "V1 Step");  addKnob ("iv2", "V2 Step");
     addKnob ("iv3", "V3 Step");  addKnob ("iv4", "V4 Step");
@@ -76,9 +80,11 @@ void ChoirAudioProcessorEditor::resized()
     auto top = getLocalBounds().withTrimmedTop (40).removeFromTop (36).reduced (10, 4);
     keyBox.setBounds (top.removeFromLeft (70));
     top.removeFromLeft (8);
-    scaleBox.setBounds (top.removeFromLeft (120));
+    scaleBox.setBounds (top.removeFromLeft (110));
+    top.removeFromLeft (8);
+    rangeBox.setBounds (top.removeFromLeft (150));
     top.removeFromLeft (12);
-    midiButton.setBounds (top.removeFromLeft (150));
+    midiButton.setBounds (top.removeFromLeft (140));
     pitchLabel.setBounds (top);
 
     auto area = getLocalBounds().withTrimmedTop (84).reduced (10);

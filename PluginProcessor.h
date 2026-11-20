@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "HarmonizerEngine.h"
+#include "Dsp.h"
 
 class ChoirAudioProcessor : public juce::AudioProcessor
 {
@@ -46,7 +47,10 @@ private:
     static constexpr int chunkSize = 512;
 
     HarmonizerEngine engine;
-    juce::dsp::Reverb reverb;
+    PlateReverb reverb;
+    Biquad airL, airR;
+    float lastAirDb = -1000.0f;
+    int   lastLatency = -1;
     std::array<bool, 128> heldNotes {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChoirAudioProcessor)

@@ -19,13 +19,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout ChoirAudioProcessor::createL
             StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { "scale", 1 }, "Scale",
             StringArray { "Major", "Minor", "Dorian", "Mixolydian" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { "range", 1 }, "Voice Range",
+            StringArray { "Low voice (65 Hz+, 40 ms)", "Mid voice (100 Hz+, 26 ms)", "High voice (150 Hz+, 17 ms)" }, 1));
     l.add (std::make_unique<AudioParameterBool>   (ParameterID { "midi", 1 }, "MIDI Chord Mode", false));
 
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "tune", 1 },  "Tune",       Range (0.0f, 1.0f, 0.001f), 1.0f));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "glide", 1 }, "Glide (ms)", Range (1.0f, 200.0f, 0.1f, 0.4f), 12.0f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "glide", 1 }, "Glide (ms)", Range (1.0f, 200.0f, 0.1f, 0.4f), 8.0f));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "lead", 1 },  "Lead",       Range (0.0f, 1.0f, 0.001f), 1.0f));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "spread", 1 },"Spread (cents)", Range (0.0f, 30.0f, 0.1f), 5.0f));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "width", 1 }, "Width",      Range (0.0f, 1.0f, 0.001f), 0.7f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "air", 1 },   "Air (dB)",    Range (0.0f, 9.0f, 0.1f), 3.0f));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "out", 1 },   "Output (dB)",Range (-24.0f, 6.0f, 0.1f), -3.0f));
 
     const int   defIv[4] = { 2, 4, -3, -7 };
@@ -37,8 +40,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ChoirAudioProcessor::createL
                 "Voice " + String (k + 1) + " Level", Range (0.0f, 1.0f, 0.001f), 0.6f));
     }
 
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "reverbSize", 1 }, "Hall Size", Range (0.0f, 1.0f, 0.001f), 0.8f));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "reverbMix", 1 },  "Hall Mix",  Range (0.0f, 1.0f, 0.001f), 0.3f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "reverbSize", 1 }, "Hall Size", Range (0.0f, 1.0f, 0.001f), 0.7f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "reverbMix", 1 },  "Hall Mix",  Range (0.0f, 1.0f, 0.001f), 0.35f));
     return l;
 }
 
@@ -54,12 +57,13 @@ bool ChoirAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
 void ChoirAudioProcessor::prepareToPlay (double sampleRate, int)
 {
     engine.prepare (sampleRate);
-    setLatencySamples (engine.latencySamples());
+    lastLatency = engine.latencySamples();
+    setLatencySamples (lastLatency);
     heldNotes.fill (false);
 
-    juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) chunkSize, 2 };
-    reverb.prepare (spec);
-    reverb.reset();
+    reverb.prepare (sampleRate);
+    airL.reset(); airR.reset();
+    lastAirDb = -1000.0f;
 }
 
 void ChoirAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -86,6 +90,7 @@ void ChoirAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     HarmonizerEngine::Params p;
     p.key         = (int) val ("key");
     p.scale       = (int) val ("scale");
+    p.range       = (int) val ("range");
     p.midiMode    = val ("midi") > 0.5f;
     p.tune        = val ("tune");
     p.glideMs     = val ("glide");
@@ -100,15 +105,15 @@ void ChoirAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     const float outGain = juce::Decibels::decibelsToGain (val ("out"));
     const float rvMix   = val ("reverbMix");
+    reverb.setSize (val ("reverbSize"));
 
-    juce::dsp::Reverb::Parameters rp;
-    rp.roomSize   = val ("reverbSize");
-    rp.damping    = 0.45f;
-    rp.width      = 1.0f;
-    rp.freezeMode = 0.0f;
-    rp.wetLevel   = 0.5f * rvMix;
-    rp.dryLevel   = 0.5f * (1.0f - rvMix);
-    reverb.setParameters (rp);
+    const float airDb = val ("air");
+    if (std::abs (airDb - lastAirDb) > 0.01f)
+    {
+        airL.setHighShelf ((float) getSampleRate(), 5500.0f, airDb);
+        airR.setHighShelf ((float) getSampleRate(), 5500.0f, airDb);
+        lastAirDb = airDb;
+    }
 
     const float* inL = buffer.getReadPointer (0);
     const float* inR = numIn > 1 ? buffer.getReadPointer (1) : inL;
@@ -126,17 +131,23 @@ void ChoirAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
         engine.process (mono.data(), wetL.data(), wetR.data(), n, p, heldNotes.data());
 
-        float* ptrs[2] = { wetL.data(), wetR.data() };
-        juce::AudioBuffer<float> wetBuf (ptrs, 2, n);
-        juce::dsp::AudioBlock<float> block (wetBuf);
-        juce::dsp::ProcessContextReplacing<float> ctx (block);
-        reverb.process (ctx);
+        if (engine.latencySamples() != lastLatency)                 // voice range changed
+        {
+            lastLatency = engine.latencySamples();
+            setLatencySamples (lastLatency);
+        }
 
         // inL/inR may alias outL/outR, so write only after the whole chunk was read above.
         for (int i = 0; i < n; ++i)
         {
-            outL[offset + i] = wetL[(size_t) i] * outGain;
-            outR[offset + i] = wetR[(size_t) i] * outGain;
+            const float l = airL.process (wetL[(size_t) i]);        // "air" shelf for crispness
+            const float r = airR.process (wetR[(size_t) i]);
+
+            float rl, rr;
+            reverb.process (0.5f * (l + r), rl, rr);                // plate reverb (added, not crossfaded)
+
+            outL[offset + i] = (l + rvMix * rl) * outGain;
+            outR[offset + i] = (r + rvMix * rr) * outGain;
         }
     }
 }
